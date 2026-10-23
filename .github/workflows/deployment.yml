@@ -102,8 +102,8 @@ jobs:
 
             BRANCH=$(git branch --show-current)
 
-            if [ "$BRANCH" != "main" ]; then
-              git checkout main
+            if [ "$BRANCH" != "featurebranch/deployment" ]; then
+              git checkout featurebranch/deployment
             fi
             
             git pull 

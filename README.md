@@ -26,7 +26,7 @@ Each component runs in its own Docker container and communicates with the other 
         - [Image](#image-1)
         - [Enviroment](#environment-1)
         - [Volume](#volume-2)
-    
+    - [CI/CD Pipeline](#cicd-pipeline)
 
 ## Quickstart
 
@@ -242,3 +242,93 @@ volumes:
 The volume stores the PostgreSQL database files outside the container.
 
 This is important because removing and recreating the database container without a persistent volume can result in the loss of the entire database.
+
+### CI/CD Pipeline
+
+This project uses GitHub Actions to test the Docker Compose environment and deploy the application to a V-Server.
+
+The workflow is defined in `.github/workflows/deployment.yaml.`
+
+1. Triggering the workflow
+
+The pipeline can be triggered in two ways:
+
+Push to featurebranch/deployment: Automatically starts the workflow when changes are pushed to this branch.
+
+Manual execution: The workflow can be started manually from the Actions tab in the GitHub repository using workflow_dispatch.
+
+2. Test stage
+
+Before deployment, the workflow runs the following checks on GitHub Actions Runner:
+
+- Checks out the repository, including its Git submodules.
+
+- Creates the .env file from .env.example.
+
+- Starts the application using Docker Compose.
+
+- Checks the container status.
+
+- Sends an HTTP request to http://localhost:8282 to verify that the website responds.
+
+- Verifies the container connections. 
+
+- The deployment job runs only if the test job succeeds.
+
+3. Deployment stage
+
+After successful tests, GitHub Actions connects to the V-Server via SSH and performs the following steps:
+
+- Changes to the conduit-container directory.
+
+- Switches to the main branch if necessary.
+
+- Pulls the latest changes from GitHub.
+
+- Initializes and updates the Git submodules.
+
+- Stops the existing Docker Compose containers.
+
+- Rebuilds the Docker images and starts the updated containers.
+
+4. Required GitHub Secrets
+
+The following repository secrets must be configured under `Settings` → `Secrets and variables` → `Actions`:
+
+VM_HOST : The IP address or hostname of the target V-Server.
+
+VM_USER : The username of the user account used to connect to the V-Server via SSH.
+
+VM_SSH_KEY: The private SSH key used by GitHub Actions to establish an SSH connection to the V-Server.
+
+To configure this access:
+
+1. Generate a separate SSH key pair on the V-Server for repository access.
+
+2. Add the public key to the GitHub account under Settings → SSH and GPG keys → New SSH key, selecting Authentication Key.
+
+3. Store the corresponding private key on the V-Server and configure SSH to use it when connecting to GitHub.
+
+4. Verify the connection using ssh -T git@github.com.
+
+
+
+The V-Server must also have Git access to the repository over ssh in `Profile` → `Settings` → `SSH and GPG keys` → `Authentication keys`.
+
+Security note: Private SSH keys must never be committed to the repository or shared publicly. Store the GitHub Actions deployment key in repository secrets and restrict access to the server and repository keys.
+
+5. Deployment requirements
+
+Before running the pipeline, ensure that:
+
+- Docker and the Docker Compose plugin are installed on the V-Server.
+
+- The repository is available at ~/conduit-container for the configured SSH user.
+
+- The main branch exists on the V-Server and on GitHub.
+
+- The .env file on the V-Server contains the required production configuration.
+
+- The application exposes its website on port 8282 for the test stage.
+
+Note: The workflow deploys the main branch to the V-Server, even though automatic workflow execution is triggered by pushes to featurebranch/deployment. Make sure the changes intended for production have been merged into main before deployment.

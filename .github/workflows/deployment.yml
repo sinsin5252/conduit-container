@@ -125,6 +125,5 @@ jobs:
               echo "IP_ADDRESS_SERVER ist bereits korrekt."
             fi
 
-            docker compose -f docker-compose.yaml down
-            docker compose -f docker-compose.yaml up -d
+            docker compose -f docker-compose.yaml up -d --pull always
             docker image prune -f

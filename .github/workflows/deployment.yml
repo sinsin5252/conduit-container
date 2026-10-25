@@ -86,9 +86,33 @@ jobs:
   Deploy:
     name: Deployment
     runs-on: ubuntu-latest
-    needs: Test
+    needs: Build-and-Push
 
     steps:
+      - name: Generate .env file from GitHub Secrets
+        run: |
+          cat > .env << 'EOF'
+          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_PORT=5432
+          IP_ADDRESS_SERVER=${{ secrets.VM_HOST }}
+          DJANGO_SUPERUSER_USERNAME=${{ secrets.DJANGO_SUPERUSER_USERNAME }}
+          DJANGO_SUPERUSER_EMAIL=${{ secrets.DJANGO_SUPERUSER_EMAIL }}
+          DJANGO_SUPERUSER_PASSWORD=${{ secrets.DJANGO_SUPERUSER_PASSWORD }}
+          DJANGO_SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}
+          DJANGO_DEBUG= False
+          EOF
+          
+      - name: Copy docker-compose.yaml and .env to server
+        uses: appleboy/scp-action@v1.0.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          source: "docker-compose.yaml,.env"
+          target: "~/conduit-container"
+
       - name: Deploy to V-Server
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -100,30 +124,9 @@ jobs:
 
             cd ~/conduit-container
 
-            BRANCH=$(git branch --show-current)
-
-            if [ "$BRANCH" != "featurebranch/deployment" ]; then
-              git checkout featurebranch/deployment
-            fi
-            
-            git pull 
-            git submodule update --init
-
-            EXPECTED_IP='${{ secrets.VM_HOST }}'
-
-            if [ ! -f .env ]; then
-              echo "Fehler: .env existiert nicht!"
-              cp .env.example .env
-            fi
-
-            CURRENT_IP=$(grep '^IP_ADDRESS_SERVER=' .env | tail -n 1 | cut -d '=' -f 2-)
-
-            if [ "$CURRENT_IP" != "$EXPECTED_IP" ]; then
-              echo "IP_ADDRESS_SERVER wird aktualisiert."
-              sed -i "s|^IP_ADDRESS_SERVER=.*|IP_ADDRESS_SERVER=$EXPECTED_IP|" .env
-            else
-              echo "IP_ADDRESS_SERVER ist bereits korrekt."
-            fi
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io 
+            -u "${{ github.actor }}" 
+            --password-stdin
 
             docker compose -f docker-compose.yaml up -d --pull always
             docker image prune -f

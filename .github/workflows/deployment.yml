@@ -124,7 +124,7 @@ jobs:
 
             cd ~/conduit-container
 
-            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -username "${{ github.actor }}" --password-stdin
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
 
             docker compose -f docker-compose.yaml up -d --pull always
             docker image prune -f

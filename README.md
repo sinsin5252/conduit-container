@@ -309,13 +309,21 @@ cat github_actions_deploy.pub >> ~/.ssh/authorized_keys
 
 **Required GitHub Secrets**
 
-The following repository secrets must be configured at `Settings` → `Secrets and variables` → `Actions`:
+The following repository secrets must be configured under `Settings` → `Secrets and variables` → `Actions` in your GitHub repository.
 
-VM_HOST : The IP address or hostname of the target Server.
-
-VM_USER : The username of the user account used to connect to the Server via SSH.
-
-VM_SSH_KEY: The private SSH key which created previously used by GitHub Actions to establish an SSH connection.
+| Secret | Description |
+|---|---|
+| `VM_HOST` | The IP address or hostname of the target server. |
+| `VM_USER` | The username of the account used to connect to the server via SSH. |
+| `VM_SSH_KEY` | The private SSH key used by GitHub Actions to establish an SSH connection to the server. |
+| `POSTGRES_DB` | The name of the PostgreSQL database. |
+| `POSTGRES_USER` | The username used to connect to the PostgreSQL database. |
+| `POSTGRES_PASSWORD` | The password for the PostgreSQL database user. |
+| `DJANGO_SUPERUSER_USERNAME` | The username of the Django superuser account. |
+| `DJANGO_SUPERUSER_EMAIL` | The email address of the Django superuser account. |
+| `DJANGO_SUPERUSER_PASSWORD` | The password for the Django superuser account. |
+| `DJANGO_SECRET_KEY` | The secret key used by Django for cryptographic signing and security-related operations. |
+| `GHCR_TOKEN` | A GitHub Personal Access Token (classic) with at least the `read:packages` permission, used to authenticate with GitHub Container Registry (GHCR) and pull private container images. |
 
 >[!CAUTION]
 >Security note: Never commit private SSH keys, access tokens, or production secrets to the repository. Store GitHub Actions> >credentials in repository secrets and restrict their permissions to the minimum required.>
@@ -348,29 +356,31 @@ Before deployment, the workflow runs the following checks on GitHub Actions Runn
 
 **3. Build and Push stage**
 
-After the tests pass, the workflow:
+- After the tests pass, the workflow:
 
-Builds the frontend and backend Docker images.
+- Builds the frontend and backend Docker images.
 
-Tags the images with latest and the current Git commit SHA.
+- Tags the images with latest and the current Git commit SHA.
 
-Authenticates with GHCR using GitHub Actions credentials.
+- Authenticates with GHCR using GitHub Actions credentials.
 
-Pushes the images to GHCR.
+- Pushes the images to GHCR.
 
 **4. Deployment stage**
 
 After successful tests, GitHub Actions connects to the Server via SSH and performs the following steps:
 
-- Changes to the conduit-container directory.
+- Creates the `.env` file and populates it with values from GitHub Secrets.
 
-- Switches to the `featurebranch/deployment` if necessary.
+- Copy docker-compose.yaml and .env to server
 
-- Pulls the latest changes from GitHub.
+- Change to the project folder
 
-- Initializes and updates the Git submodules.
+- Login to GHCR
 
-- Pulls the latest Docker images from GHCR and recreates the containers if needed.
+- Pulls the latest available images and starts or updates the containers in the background.
+
+- Removes unused Docker images to free up disk space.
 
 
 

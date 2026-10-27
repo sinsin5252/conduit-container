@@ -38,7 +38,7 @@ jobs:
       - name: Check if conduit container is healthy
         run: |
           docker compose -f docker-compose.yaml exec database pg_isready
-          docker compose -f docker-compose.yaml exec backend python manage.py shell -c "from django.db import connection; connection.ensure_connection(); print('Datenbankverbindung OK')"
+          docker compose -f docker-compose.yaml exec backend python manage.py shell -c "from django.db import connection; connection.ensure_connection(); print('database connection OK')"
           curl -i http://localhost:8282/api/user
 
       - name: Show logs if test fails

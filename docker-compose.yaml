@@ -2,8 +2,8 @@ services:
   frontend:
     build:
       context: .
-      dockerfile: Dockerfile.frontend
-    image: frontend-image:local
+      dockerfile: Frontend.Dockerfile
+    image: ghcr.io/sinsin5252/conduit-frontend:latest
     container_name: frontend
     restart: unless-stopped
     ports:
@@ -13,8 +13,8 @@ services:
   backend:
     build:
       context: .
-      dockerfile: Dockerfile.backend
-    image: backend-image:local
+      dockerfile: Backend.Dockerfile
+    image: ghcr.io/sinsin5252/conduit-backend:latest
     container_name: backend
     restart: unless-stopped
     environment:

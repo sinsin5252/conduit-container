@@ -1,0 +1,130 @@
+name: CI/CD Pipeline Conduit Container
+
+on:
+
+  push:
+    branches: [ "featurebranch/deployment" ]
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  Test:
+    name: Test 
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with: 
+          submodules: true
+
+      - name: Build environment
+        run: cp .env.example .env
+
+      - name: Run conduit container compose
+        run: docker compose -f docker-compose.yaml up -d
+
+      - name: Check if conduit container is running
+        run: docker compose -f docker-compose.yaml ps
+      
+      - name: Check if website is running
+        run: curl --fail --retry 10 --retry-delay 3 http://localhost:8282
+
+      - name: Check if conduit container is healthy
+        run: |
+          docker compose -f docker-compose.yaml exec database pg_isready
+          docker compose -f docker-compose.yaml exec backend python manage.py shell -c "from django.db import connection; connection.ensure_connection(); print('database connection OK')"
+          curl -i http://localhost:8282/api/user
+
+      - name: Show logs if test fails
+        if: failure()
+        run: docker compose -f docker-compose.yaml logs 
+
+  Build-and-Push:
+    name: Build and push images to GHCR
+    runs-on: ubuntu-latest
+    needs: Test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Build & push backend image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Backend.Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.actor }}/conduit-backend:latest
+            ghcr.io/${{ github.actor }}/conduit-backend:${{ github.sha }}
+
+      - name: Build & push frontend image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Frontend.Dockerfile 
+          push: true
+          tags: |
+            ghcr.io/${{ github.actor }}/conduit-frontend:latest
+            ghcr.io/${{ github.actor }}/conduit-frontend:${{ github.sha }}
+      
+  Deploy:
+    name: Deployment
+    runs-on: ubuntu-latest
+    needs: Build-and-Push
+
+    steps:
+      - name: Generate .env file from GitHub Secrets
+        run: |
+          cat > .env << 'EOF'
+          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_PORT=5432
+          IP_ADDRESS_SERVER=${{ secrets.VM_HOST }}
+          DJANGO_SUPERUSER_USERNAME=${{ secrets.DJANGO_SUPERUSER_USERNAME }}
+          DJANGO_SUPERUSER_EMAIL=${{ secrets.DJANGO_SUPERUSER_EMAIL }}
+          DJANGO_SUPERUSER_PASSWORD=${{ secrets.DJANGO_SUPERUSER_PASSWORD }}
+          DJANGO_SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}
+          DJANGO_DEBUG= False
+          EOF
+          
+      - name: Copy docker-compose.yaml and .env to server
+        uses: appleboy/scp-action@v1.0.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          source: "docker-compose.yaml,.env"
+          target: "~/conduit-container"
+
+      - name: Deploy to V-Server
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            set -e
+
+            cd ~/conduit-container
+
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+
+            docker compose -f docker-compose.yaml up -d --pull always
+            docker image prune -f
